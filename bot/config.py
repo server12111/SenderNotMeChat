@@ -27,13 +27,36 @@ MEDIA_DIR.mkdir(parents=True, exist_ok=True)
 def _database_url() -> str:
     """SQLite всегда кладём внутрь DATA_DIR (относительные пути из старых .env не уводят базу из сохраняемой папки).
     PostgreSQL и прочие — как есть."""
-    url = os.getenv("DATABASE_URL", "").strip()
-    if url and not url.startswith("sqlite"):
-        return url
-    name = Path(url.split("///", 1)[1]).name if "///" in url else "bot.db"
-    if url and "///" in url and Path(url.split("///", 1)[1]).is_absolute():
-        return url
-    return f"sqlite+aiosqlite:///{(DATA_DIR / name).as_posix()}"
+    default = f"sqlite+aiosqlite:///{(DATA_DIR / 'bot.db').as_posix()}"
+    url = os.getenv("DATABASE_URL", "").strip().strip("'\"")
+    if not url:
+        return default
+
+    if "://" not in url:  # просто путь к файлу («/app/data/bot.db», «data/bot.db», «bot.db»)
+        p = Path(url)
+        return f"sqlite+aiosqlite:///{(p if p.is_absolute() else DATA_DIR / p.name).as_posix()}"
+
+    scheme = url.split("://", 1)[0]
+    if scheme.startswith("sqlite"):
+        path = url.split(":///", 1)[1] if ":///" in url else ""
+        if not path:
+            return default
+        p = Path(path)
+        # абсолютный путь — как есть, относительный — внутрь DATA_DIR
+        return f"sqlite+aiosqlite:///{(p if p.is_absolute() else DATA_DIR / p.name).as_posix()}"
+
+    if scheme in ("postgres", "postgresql"):  # так хостинги выдают URL; драйвер у нас asyncpg
+        url = "postgresql+asyncpg://" + url.split("://", 1)[1]
+    try:
+        from sqlalchemy.engine import make_url
+        make_url(url)
+        if not url.startswith(("postgresql", "mysql")):
+            raise ValueError("неизвестная СУБД")
+    except Exception:  # нераспознаваемая строка не должна ронять запуск
+        import logging
+        logging.getLogger(__name__).warning("DATABASE_URL не распознан, использую SQLite в %s", DATA_DIR)
+        return default
+    return url
 
 
 @dataclass(frozen=True)
