@@ -19,9 +19,44 @@ def _data_dir() -> Path:
     return Path("/app/data") if Path("/app").is_dir() and os.name != "nt" else BASE_DIR / "data"
 
 
+def _writable(path: Path) -> bool:
+    """Папка существует (создаём при необходимости) и в неё реально можно писать."""
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+        probe = path / ".write_test"
+        probe.write_text("ok")
+        probe.unlink()
+        return True
+    except OSError:
+        return False
+
+
 DATA_DIR = _data_dir()
+DATA_DIR_PROBLEM: str | None = None
+if not _writable(DATA_DIR):
+    # Папка недоступна для записи (нет прав / нет такого диска). Не падаем с «unable to open database file»:
+    # берём запасную, но предупреждаем — данные в ней могут не пережить перезапуск.
+    import tempfile
+    for _fallback in (BASE_DIR / "data", Path(tempfile.gettempdir()) / "sender_data"):
+        if _writable(_fallback):
+            DATA_DIR_PROBLEM = f"папка данных {DATA_DIR} недоступна для записи, использую {_fallback}"
+            DATA_DIR = _fallback
+            break
+    else:
+        raise SystemExit(f"Нет доступной для записи папки для данных (пробовал {DATA_DIR}). Задайте DATA_DIR.")
 MEDIA_DIR = DATA_DIR / "media"
 MEDIA_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _sqlite_file(p: Path) -> Path:
+    """Относительный путь — внутрь DATA_DIR; абсолютный — как есть, но только если туда можно писать."""
+    if not p.is_absolute():
+        return DATA_DIR / p.name
+    if _writable(p.parent):
+        return p
+    global DATA_DIR_PROBLEM
+    DATA_DIR_PROBLEM = (DATA_DIR_PROBLEM or "") + f" Папка для базы {p.parent} недоступна, база будет в {DATA_DIR}."
+    return DATA_DIR / p.name
 
 
 def _database_url() -> str:
@@ -34,7 +69,7 @@ def _database_url() -> str:
 
     if "://" not in url:  # просто путь к файлу («/app/data/bot.db», «data/bot.db», «bot.db»)
         p = Path(url)
-        return f"sqlite+aiosqlite:///{(p if p.is_absolute() else DATA_DIR / p.name).as_posix()}"
+        return f"sqlite+aiosqlite:///{_sqlite_file(p).as_posix()}"
 
     scheme = url.split("://", 1)[0]
     if scheme.startswith("sqlite"):
@@ -43,7 +78,7 @@ def _database_url() -> str:
             return default
         p = Path(path)
         # абсолютный путь — как есть, относительный — внутрь DATA_DIR
-        return f"sqlite+aiosqlite:///{(p if p.is_absolute() else DATA_DIR / p.name).as_posix()}"
+        return f"sqlite+aiosqlite:///{_sqlite_file(p).as_posix()}"
 
     if scheme in ("postgres", "postgresql"):  # так хостинги выдают URL; драйвер у нас asyncpg
         url = "postgresql+asyncpg://" + url.split("://", 1)[1]

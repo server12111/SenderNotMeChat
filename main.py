@@ -26,6 +26,10 @@ async def main() -> None:
     if not config.api_id or not config.api_hash:
         logging.warning("API_ID/API_HASH не заданы — добавление аккаунтов и отправка работать не будут")
 
+    from bot.config import DATA_DIR, DATA_DIR_PROBLEM
+    logging.info("Данные: %s · БД: %s", DATA_DIR, config.database_url.split("@")[-1])
+    if DATA_DIR_PROBLEM:
+        logging.error("⚠️ %s. Данные могут пропасть при перезапуске — проверьте DATA_DIR и права на папку.", DATA_DIR_PROBLEM)
     await init_db()
     bot = Bot(config.bot_token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     dp = Dispatcher(storage=MemoryStorage())
