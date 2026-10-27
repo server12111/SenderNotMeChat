@@ -1,0 +1,11 @@
+aiogram>=3.4,<4
+telethon>=1.36
+SQLAlchemy[asyncio]>=2.0
+aiosqlite>=0.20
+APScheduler>=3.10,<4
+python-dotenv>=1.0
+aiohttp>=3.9
+python-socks[asyncio]>=2.4
+cryptography>=42
+# опционально, для импорта tdata:
+# opentele

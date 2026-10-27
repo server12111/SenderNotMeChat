@@ -1,0 +1,17 @@
+# секреты и данные — никогда в репозиторий
+.env
+data/
+*.session
+*.key
+*.db
+*.db-wal
+*.db-shm
+
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.venv/
+venv/
+.idea/
+.vscode/
