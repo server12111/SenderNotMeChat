@@ -23,6 +23,7 @@ from bot.utils.ui import esc, ikb, render
 
 log = logging.getLogger(__name__)
 router = Router(name="admin")
+_bg_tasks: set = set()
 # доступ строго по ADMIN_IDS — на уровне роутера, чужие апдейты сюда не доходят
 router.message.filter(F.from_user.id.in_(config.admin_ids))
 router.callback_query.filter(F.from_user.id.in_(config.admin_ids))
@@ -233,7 +234,9 @@ async def cb_bc_go(call: CallbackQuery, state: FSMContext, bot: Bot):
     await call.answer("🚀 Рассылка пошла", show_alert=False)
     kb = _parse_buttons(d["bc_buttons"]) if d.get("bc_buttons") else None
     status = await call.message.edit_text("📢 Отправка… 0%")
-    asyncio.create_task(_broadcast(bot, status.chat.id, status.message_id, d["bc_chat"], d["bc_mid"], kb))
+    task = asyncio.create_task(_broadcast(bot, status.chat.id, status.message_id, d["bc_chat"], d["bc_mid"], kb))
+    _bg_tasks.add(task)  # asyncio держит на задачи только слабую ссылку — без этого рассылку мог убрать сборщик мусора
+    task.add_done_callback(_bg_tasks.discard)
 
 
 async def _broadcast(bot: Bot, chat_id: int, status_mid: int, src_chat: int, src_mid: int, kb) -> None:

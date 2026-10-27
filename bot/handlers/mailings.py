@@ -309,6 +309,9 @@ async def step_accounts(event, state, session, user, plan):
 @router.callback_query(F.data.startswith("ml:cacc:"))
 async def cb_cacc(call: CallbackQuery, state: FSMContext, session, user, plan):
     aid = int(call.data.split(":")[2])
+    acc = await session.get(Account, aid)
+    if not acc or acc.user_id != user.id:  # колбэк можно подделать — берём только свои аккаунты
+        return await call.answer("Аккаунт не найден", show_alert=True)
     chosen = list((await state.get_data()).get("accounts") or [])
     if aid in chosen:
         chosen.remove(aid)
